@@ -1,0 +1,25 @@
+From 5446623aeb978960ff140140ee544231b89f1813 Mon Sep 17 00:00:00 2001
+From: okazunotri2013 <92250924+okazunori2013@users.noreply.github.com>
+Date: Tue, 27 Sep 2022 20:28:28 +0900
+Subject: [PATCH] fix mpv build
+
+---
+ build/media-suite_compile.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/build/media-suite_compile.sh b/build/media-suite_compile.sh
+index bb916766..e8f94f67 100644
+--- a/build/media-suite_compile.sh
++++ b/build/media-suite_compile.sh
+@@ -2434,7 +2434,7 @@ if [[ $mpv != n ]] && pc_exists libavcodec libavformat libswscale libavfilter; t
+         extra_script post configure
+ 
+         replace="LIBPATH_lib\1 = ['${LOCALDESTDIR}/lib','${MINGW_PREFIX}/lib']"
+-        sed -r -i "s:LIBPATH_lib(ass|av(|device|filter)) = .*:$replace:g" ./build/c4che/_cache.py	
++        sed -r -i "s:LIBPATH_(lib)?(ffmpeg|ass|av|archive|bluray|jpegxl(|device|filter)) = .*:$replace:g" ./build/c4che/_cache.py	
+ 
+         extra_script pre build
+         log build /usr/bin/python waf -j "${cpuCount:-1}"
+-- 
+2.37.3.windows.1
+
