@@ -1,0 +1,179 @@
+From 0e64b87cb9fe78a341942515dfb507e4a392e5dd Mon Sep 17 00:00:00 2001
+From: Dudemanguy <random342@airmail.cc>
+Date: Tue, 19 Oct 2021 21:47:23 -0500
+Subject: [PATCH] player: add --auto-window-resize option
+
+mpv's window resizing logic always automatically resized the window
+whenever the video resolution changed (i.e. advancing forward in a
+playlist). This simply introduces the option to make this behavior
+configurable. Every windowing backend would need to implement this
+behavior in their code. This commit implements it for wayland, win32,
+and x11.
+---
+ DOCS/man/options.rst       |  7 +++++++
+ options/options.c          |  2 ++
+ options/options.h          |  1 +
+ video/out/w32_common.c     |  5 +++--
+ video/out/wayland_common.c |  4 +++-
+ video/out/x11_common.c     | 21 +++++++++++++--------
+ video/out/x11_common.h     |  5 ++---
+ 7 files changed, 31 insertions(+), 14 deletions(-)
+
+diff --git a/DOCS/man/options.rst b/DOCS/man/options.rst
+index 682ab2d1781..25c91a0be04 100644
+--- a/DOCS/man/options.rst
++++ b/DOCS/man/options.rst
+@@ -3248,6 +3248,13 @@ Window
+     there is a change in video parameters, video stream or file. This used to
+     be the default behavior. Currently only affects X11 VOs.
+ 
++``--auto-window-resize=<yes|no>``
++    (Wayland, Win32, and X11)
++    By default, mpv will automatically resize itself if the video's size changes
++    (i.e. advancing forward in a playlist). Setting this to ``no`` disables this
++    behavior so the window size never changes automatically. This option does
++    not have any impact on the ``--autofit`` or ``--geometry`` options.
++
+ ``--no-keepaspect``, ``--keepaspect``
+     ``--no-keepaspect`` will always stretch the video to window size, and will
+     disable the window manager hints that force the window aspect ratio.
+diff --git a/options/options.c b/options/options.c
+index 0b1c58d9a60..f6d72cccd07 100644
+--- a/options/options.c
++++ b/options/options.c
+@@ -122,6 +122,7 @@ static const m_option_t mp_vo_opt_list[] = {
+     {"autofit", OPT_SIZE_BOX(autofit)},
+     {"autofit-larger", OPT_SIZE_BOX(autofit_larger)},
+     {"autofit-smaller", OPT_SIZE_BOX(autofit_smaller)},
++    {"auto-window-resize", OPT_FLAG(auto_window_resize)},
+     {"window-scale", OPT_DOUBLE(window_scale), M_RANGE(0.001, 100)},
+     {"window-minimized", OPT_FLAG(window_minimized)},
+     {"window-maximized", OPT_FLAG(window_maximized)},
+@@ -202,6 +203,7 @@ const struct m_sub_options vo_sub_opts = {
+         .panscan = 0.0f,
+         .scale_x = 1.0f,
+         .scale_y = 1.0f,
++        .auto_window_resize = 1,
+         .keepaspect = 1,
+         .keepaspect_window = 1,
+         .hidpi_window_scale = 1,
+diff --git a/options/options.h b/options/options.h
+index f38f3b6bfb1..41261d103aa 100644
+--- a/options/options.h
++++ b/options/options.h
+@@ -47,6 +47,7 @@ typedef struct mp_vo_opts {
+     struct m_geometry autofit_smaller;
+     double window_scale;
+ 
++    int auto_window_resize;
+     int keepaspect;
+     int keepaspect_window;
+     int hidpi_window_scale;
+diff --git a/video/out/w32_common.c b/video/out/w32_common.c
+index f228bc99b62..8a8f2c3885e 100644
+--- a/video/out/w32_common.c
++++ b/video/out/w32_common.c
+@@ -1438,8 +1438,9 @@ static void gui_thread_reconfig(void *ptr)
+     vo_calc_window_geometry3(vo, &screen, &mon, w32->dpi_scale, &geo);
+     vo_apply_window_geometry(vo, &geo);
+ 
+-    bool reset_size = w32->o_dwidth != vo->dwidth ||
+-                      w32->o_dheight != vo->dheight;
++    bool reset_size = (w32->o_dwidth != vo->dwidth ||
++                       w32->o_dheight != vo->dheight) &&
++                       w32->opts->auto_window_resize;
+ 
+     w32->o_dwidth = vo->dwidth;
+     w32->o_dheight = vo->dheight;
+diff --git a/video/out/wayland_common.c b/video/out/wayland_common.c
+index e4a590704be..35d9c283292 100644
+--- a/video/out/wayland_common.c
++++ b/video/out/wayland_common.c
+@@ -1923,7 +1923,9 @@ int vo_wayland_reconfig(struct vo *vo)
+     }
+ 
+     set_geometry(wl);
+-    wl->window_size = wl->vdparams;
++
++    if (wl->vo_opts->auto_window_resize)
++        wl->window_size = wl->vdparams;
+ 
+     if (wl->opts->configure_bounds)
+         set_window_bounds(wl);
+diff --git a/video/out/x11_common.c b/video/out/x11_common.c
+index 4988f8da7a1..2bfc87501c9 100644
+--- a/video/out/x11_common.c
++++ b/video/out/x11_common.c
+@@ -1092,9 +1092,9 @@ static void vo_x11_check_net_wm_state_change(struct vo *vo)
+             XFree(elems);
+         }
+ 
+-        if (opts->window_maximized && !is_maximized && x11->pending_geometry_change) {
++        if (opts->window_maximized && !is_maximized && x11->geometry_change) {
++            x11->geometry_change = false;
+             vo_x11_config_vo_window(vo);
+-            x11->pending_geometry_change = false;
+         }
+ 
+         opts->window_minimized = is_minimized;
+@@ -1722,6 +1722,10 @@ void vo_x11_config_vo_window(struct vo *vo)
+ 
+     assert(x11->window);
+ 
++    // Don't attempt to change autofit/geometry on maximized windows.
++    if (x11->geometry_change && opts->window_maximized)
++        return;
++
+     vo_x11_update_screeninfo(vo);
+ 
+     struct vo_win_geometry geo;
+@@ -1735,7 +1739,9 @@ void vo_x11_config_vo_window(struct vo *vo)
+         rc = (struct mp_rect){0, 0, RC_W(x11->winrc), RC_H(x11->winrc)};
+     }
+ 
+-    bool reset_size = x11->old_dw != RC_W(rc) || x11->old_dh != RC_H(rc);
++    bool reset_size = (x11->old_dw != RC_W(rc) || x11->old_dh != RC_H(rc)) &&
++                      (opts->auto_window_resize || x11->geometry_change);
++
+     x11->old_dw = RC_W(rc);
+     x11->old_dh = RC_H(rc);
+ 
+@@ -1746,6 +1752,8 @@ void vo_x11_config_vo_window(struct vo *vo)
+         vo_x11_highlevel_resize(vo, rc);
+     }
+ 
++    x11->geometry_change = false;
++
+     if (opts->ontop)
+         vo_x11_setlayer(vo, opts->ontop);
+ 
+@@ -1961,11 +1969,8 @@ static void vo_x11_set_geometry(struct vo *vo)
+     if (!x11->window)
+         return;
+ 
+-    if (x11->opts->window_maximized) {
+-        x11->pending_geometry_change = true;
+-    } else {
+-        vo_x11_config_vo_window(vo);
+-    }
++    x11->geometry_change = true;
++    vo_x11_config_vo_window(vo);
+ }
+ 
+ bool vo_x11_check_visible(struct vo *vo) {
+diff --git a/video/out/x11_common.h b/video/out/x11_common.h
+index 0134935daa6..497861bdab2 100644
+--- a/video/out/x11_common.h
++++ b/video/out/x11_common.h
+@@ -118,9 +118,8 @@ struct vo_x11_state {
+     bool size_changed_during_fs;
+     bool pos_changed_during_fs;
+ 
+-    /* The geometry/autofit option was changed while the window was maximized.
+-     * Wait until the state changes to resize. */
+-    bool pending_geometry_change;
++    /* One of the autofit/geometry options changed at runtime. */
++    bool geometry_change;
+ 
+     XComposeStatus compose_status;
+ 
