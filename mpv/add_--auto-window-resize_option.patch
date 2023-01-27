@@ -1,4 +1,4 @@
-From 0e64b87cb9fe78a341942515dfb507e4a392e5dd Mon Sep 17 00:00:00 2001
+From 00f8e61367f594c21201bc73897301bb1158029e Mon Sep 17 00:00:00 2001
 From: Dudemanguy <random342@airmail.cc>
 Date: Tue, 19 Oct 2021 21:47:23 -0500
 Subject: [PATCH] player: add --auto-window-resize option
@@ -10,20 +10,19 @@ configurable. Every windowing backend would need to implement this
 behavior in their code. This commit implements it for wayland, win32,
 and x11.
 ---
- DOCS/man/options.rst       |  7 +++++++
- options/options.c          |  2 ++
- options/options.h          |  1 +
- video/out/w32_common.c     |  5 +++--
- video/out/wayland_common.c |  4 +++-
- video/out/x11_common.c     | 21 +++++++++++++--------
- video/out/x11_common.h     |  5 ++---
- 7 files changed, 31 insertions(+), 14 deletions(-)
+ DOCS/man/options.rst   |  7 +++++++
+ options/options.c      |  2 ++
+ options/options.h      |  1 +
+ video/out/w32_common.c |  5 +++--
+ video/out/x11_common.c | 21 +++++++++++++--------
+ video/out/x11_common.h |  5 ++---
+ 6 files changed, 28 insertions(+), 13 deletions(-)
 
 diff --git a/DOCS/man/options.rst b/DOCS/man/options.rst
-index 682ab2d1781..25c91a0be04 100644
+index 7e99b2a5d5a..139e43ebe99 100644
 --- a/DOCS/man/options.rst
 +++ b/DOCS/man/options.rst
-@@ -3248,6 +3248,13 @@ Window
+@@ -3257,6 +3257,13 @@ Window
      there is a change in video parameters, video stream or file. This used to
      be the default behavior. Currently only affects X11 VOs.
  
@@ -38,10 +37,10 @@ index 682ab2d1781..25c91a0be04 100644
      ``--no-keepaspect`` will always stretch the video to window size, and will
      disable the window manager hints that force the window aspect ratio.
 diff --git a/options/options.c b/options/options.c
-index 0b1c58d9a60..f6d72cccd07 100644
+index dbd2a3f9bda..f1aab43deb0 100644
 --- a/options/options.c
 +++ b/options/options.c
-@@ -122,6 +122,7 @@ static const m_option_t mp_vo_opt_list[] = {
+@@ -118,6 +118,7 @@ static const m_option_t mp_vo_opt_list[] = {
      {"autofit", OPT_SIZE_BOX(autofit)},
      {"autofit-larger", OPT_SIZE_BOX(autofit_larger)},
      {"autofit-smaller", OPT_SIZE_BOX(autofit_smaller)},
@@ -49,7 +48,7 @@ index 0b1c58d9a60..f6d72cccd07 100644
      {"window-scale", OPT_DOUBLE(window_scale), M_RANGE(0.001, 100)},
      {"window-minimized", OPT_FLAG(window_minimized)},
      {"window-maximized", OPT_FLAG(window_maximized)},
-@@ -202,6 +203,7 @@ const struct m_sub_options vo_sub_opts = {
+@@ -201,6 +202,7 @@ const struct m_sub_options vo_sub_opts = {
          .panscan = 0.0f,
          .scale_x = 1.0f,
          .scale_y = 1.0f,
@@ -58,10 +57,10 @@ index 0b1c58d9a60..f6d72cccd07 100644
          .keepaspect_window = 1,
          .hidpi_window_scale = 1,
 diff --git a/options/options.h b/options/options.h
-index f38f3b6bfb1..41261d103aa 100644
+index 86e95dc826a..e951883e864 100644
 --- a/options/options.h
 +++ b/options/options.h
-@@ -47,6 +47,7 @@ typedef struct mp_vo_opts {
+@@ -48,6 +48,7 @@ typedef struct mp_vo_opts {
      struct m_geometry autofit_smaller;
      double window_scale;
  
@@ -70,7 +69,7 @@ index f38f3b6bfb1..41261d103aa 100644
      int keepaspect_window;
      int hidpi_window_scale;
 diff --git a/video/out/w32_common.c b/video/out/w32_common.c
-index f228bc99b62..8a8f2c3885e 100644
+index 4ef57dc53d7..64d69d8242c 100644
 --- a/video/out/w32_common.c
 +++ b/video/out/w32_common.c
 @@ -1438,8 +1438,9 @@ static void gui_thread_reconfig(void *ptr)
@@ -85,26 +84,11 @@ index f228bc99b62..8a8f2c3885e 100644
  
      w32->o_dwidth = vo->dwidth;
      w32->o_dheight = vo->dheight;
-diff --git a/video/out/wayland_common.c b/video/out/wayland_common.c
-index e4a590704be..35d9c283292 100644
---- a/video/out/wayland_common.c
-+++ b/video/out/wayland_common.c
-@@ -1923,7 +1923,9 @@ int vo_wayland_reconfig(struct vo *vo)
-     }
- 
-     set_geometry(wl);
--    wl->window_size = wl->vdparams;
-+
-+    if (wl->vo_opts->auto_window_resize)
-+        wl->window_size = wl->vdparams;
- 
-     if (wl->opts->configure_bounds)
-         set_window_bounds(wl);
 diff --git a/video/out/x11_common.c b/video/out/x11_common.c
-index 4988f8da7a1..2bfc87501c9 100644
+index 40d6b77420c..11e2524ec3c 100644
 --- a/video/out/x11_common.c
 +++ b/video/out/x11_common.c
-@@ -1092,9 +1092,9 @@ static void vo_x11_check_net_wm_state_change(struct vo *vo)
+@@ -1093,9 +1093,9 @@ static void vo_x11_check_net_wm_state_change(struct vo *vo)
              XFree(elems);
          }
  
@@ -116,7 +100,7 @@ index 4988f8da7a1..2bfc87501c9 100644
          }
  
          opts->window_minimized = is_minimized;
-@@ -1722,6 +1722,10 @@ void vo_x11_config_vo_window(struct vo *vo)
+@@ -1723,6 +1723,10 @@ void vo_x11_config_vo_window(struct vo *vo)
  
      assert(x11->window);
  
@@ -127,7 +111,7 @@ index 4988f8da7a1..2bfc87501c9 100644
      vo_x11_update_screeninfo(vo);
  
      struct vo_win_geometry geo;
-@@ -1735,7 +1739,9 @@ void vo_x11_config_vo_window(struct vo *vo)
+@@ -1736,7 +1740,9 @@ void vo_x11_config_vo_window(struct vo *vo)
          rc = (struct mp_rect){0, 0, RC_W(x11->winrc), RC_H(x11->winrc)};
      }
  
@@ -138,7 +122,7 @@ index 4988f8da7a1..2bfc87501c9 100644
      x11->old_dw = RC_W(rc);
      x11->old_dh = RC_H(rc);
  
-@@ -1746,6 +1752,8 @@ void vo_x11_config_vo_window(struct vo *vo)
+@@ -1747,6 +1753,8 @@ void vo_x11_config_vo_window(struct vo *vo)
          vo_x11_highlevel_resize(vo, rc);
      }
  
@@ -147,7 +131,7 @@ index 4988f8da7a1..2bfc87501c9 100644
      if (opts->ontop)
          vo_x11_setlayer(vo, opts->ontop);
  
-@@ -1961,11 +1969,8 @@ static void vo_x11_set_geometry(struct vo *vo)
+@@ -1962,11 +1970,8 @@ static void vo_x11_set_geometry(struct vo *vo)
      if (!x11->window)
          return;
  
@@ -162,7 +146,7 @@ index 4988f8da7a1..2bfc87501c9 100644
  
  bool vo_x11_check_visible(struct vo *vo) {
 diff --git a/video/out/x11_common.h b/video/out/x11_common.h
-index 0134935daa6..497861bdab2 100644
+index 48516a77ad5..de17113c557 100644
 --- a/video/out/x11_common.h
 +++ b/video/out/x11_common.h
 @@ -118,9 +118,8 @@ struct vo_x11_state {
